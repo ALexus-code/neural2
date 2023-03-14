@@ -1,0 +1,322 @@
+#Загружаем библиотеки
+
+import pandas as pd #Пандас
+import matplotlib.pyplot as plt #Отрисовка графиков
+from tensorflow.keras.utils import to_categorical 
+import numpy as np #Numpy
+from tensorflow.keras.optimizers import Adam #Оптимизатор
+from tensorflow.keras.models import Sequential, Model #Два варианты моделей
+from tensorflow.keras.layers import concatenate, Input, Dense, Dropout, BatchNormalization, Flatten, Conv1D, Conv2D, LSTM, GlobalMaxPooling1D, MaxPooling1D, RepeatVector #Стандартные слои
+from sklearn.preprocessing import StandardScaler, MinMaxScaler #Нормировщики
+from tensorflow.keras.preprocessing.sequence import TimeseriesGenerator # для генерации выборки временных рядов
+
+import warnings
+warnings.filterwarnings("ignore")
+# Рисовать графики сразу же
+%matplotlib inline
+
+from google.colab import drive
+drive.mount('/content/drive')
+
+#Считываем данные с помощью pandas
+base_data = pd.read_csv('/content/drive/My Drive/Colab Notebooks/базы/18_19.csv', sep=';')
+
+import math
+base_data[['Open - Close']] = base_data['OPEN']-base_data['CLOSE']
+base_data[['MAX - MIN']] = base_data['MAX']-base_data['MIN']
+
+base_data[['/Open - Close/']] = abs(base_data['OPEN']-base_data['CLOSE'])
+base_data[['/MAX - MIN/']] = abs(base_data['MAX']-base_data['MIN'])
+
+base_data[['Open*Close']] = base_data['OPEN']*base_data['CLOSE']
+base_data[['MAX*MIN']] = base_data['MAX']*base_data['MIN']
+
+base_data[['Opennew']] = (1/(base_data['OPEN'] ))*1000
+base_data[['Closenew']] = (1/(base_data['CLOSE'] ))*1000
+base_data[['Minnew']] = (1/(base_data['MIN'] ))*1000
+base_data[['Maxnew']] = (1/(base_data['MAX'] ))*1000
+
+
+base_data.head()
+
+# Выводим параметры одного файла
+d = data18_19
+print(len(d)) # Сколько есть записей
+print(len(d.iloc[0])) # Длина одной строки данных
+print(d.iloc[0]) # Пример первой строки данных
+
+# Объединяем базы из двух файлов
+data = data16_17.copy()                 # Создаем копию первой базы
+data = pd.concat([data16_17,data18_19]) # Присоединяем к ней вторую базу
+data = np.array(data)                   # Превращаем в numpy массив
+# Сравниваем размеры
+print(len(data16_17)) # Выводим размер первой базы
+print(len(data18_19)) # Выводим размер второй базы
+print(len(data))      # Выводим размер суммарной базы
+#Отображаем исходные от точки start и длинной stop
+start = 100            #С какой точки начинаем
+#stop = data.shape[0] #Сколько точек отрисуем
+length = 300 #Сколько точек отрисуем
+
+#Заполняем текстовые названия каналов данных
+chanelNames = ['Open', 'Max', 'Min', 'Close', 'Volume']
+
+#Рисуем все графики данных
+#ЧЕтыре основных канала - open, max, min, close
+plt.figure(figsize=(22,6))
+for i in range(4):
+  #Отрисовываем часть данных
+  #От начальной точки, до начальной точки + размер шага отрисовки
+  plt.plot(data[start:start+length,i], 
+          label=chanelNames[i])
+plt.ylabel('Цена.руб')
+plt.legend()
+plt.show()
+
+#Канал volume
+plt.figure(figsize=(22,6))
+plt.bar(x=np.arange(length), height=data[start:start+length,4], label="Volume")
+plt.legend()
+plt.show()
+
+import numpy as np # Подключаем numpy
+from tensorflow.keras.preprocessing.sequence import TimeseriesGenerator # Подлкючаем модуль TimeseriesGenerator
+x_train = test_array # Создаем x_train
+y_train = test_array # Создаем y_train
+
+# Создаем генератор
+gen = TimeseriesGenerator(
+    x_train,
+    y_train,
+    length= 10,
+    sampling_rate=1,
+    stride=1,
+    batch_size=5
+    )
+# Формируем цикл for для прохождения по элементам генератора
+for i, g in enumerate(gen):
+  print('Батч №', i)
+  print('x_train:', g[0])
+  print('y_train:', g[1])
+  print()
+  x_train = test_array[:-1] # Создаем x_train
+y_train = test_array[1:] # Создаем y_train
+
+# Создаем генератор
+gen = TimeseriesGenerator(
+    x_train,
+    y_train,
+    length= 10,
+    sampling_rate=1,
+    stride=1,
+    batch_size=1
+    )
+# Формируем цикл for для прохождения по элементам генератора
+for i, g in enumerate(gen):
+  print('Батч №', i)
+  print('x_train:', g[0])
+  print('y_train:', g[1])
+  print()
+  
+x_train = test_array # Создаем x_train
+y_train = [[x, x+1] for x in range(50)] # Создаем y_train
+
+# Создаем генератор
+gen = TimeseriesGenerator(
+    x_train,
+    y_train,
+    length= 10,
+    sampling_rate=1,
+    stride=1,
+    batch_size=1
+    )
+# Формируем цикл for для прохождения по элементам генератора
+for i, g in enumerate(gen):
+  print('Батч №', i)
+  print('x_train:', g[0])
+  print('y_train:', g[1])
+  print()
+  
+  #Формируем параметры загрузки данных
+
+xLen = 300                      #Анализируем по 300 прошедшим точкам 
+valLen = 30000                  #Используем 30.000 записей для проверки
+
+trainLen = data.shape[0]-valLen # Размер тренировочной выборки
+
+#Делим данные на тренировочную и тестовую выборки 
+xTrain, xTest = data[:trainLen], data[trainLen+xLen+2:]
+
+#Масштабируем данные (отдельно для X и Y), чтобы их легче было скормить сетке
+xScaler = MinMaxScaler()
+xScaler.fit(xTrain)
+xTrain = xScaler.transform(xTrain)
+xTest = xScaler.transform(xTest)
+
+#Делаем reshape,т.к. у нас только один столбец по одному значению
+yTrain, yTest = np.reshape(data[:trainLen,3],(-1,1)), np.reshape(data[trainLen+xLen+2:,3],(-1,1)) 
+yScaler = MinMaxScaler()
+yScaler.fit(yTrain)
+yTrain = yScaler.transform(yTrain)
+yTest = yScaler.transform(yTest)
+
+#Создаем генератор для обучения
+trainDataGen = TimeseriesGenerator(xTrain, yTrain,           #В качестве параметров наши выборки
+                               length=xLen, stride=1, sampling_rate=1, #Для каждой точки (из промежутка длины xLen)
+                               batch_size=20)                #Размер batch, который будем скармливать модели
+
+#Создаем аналогичный генератор для валидации при обучении
+testDataGen = TimeseriesGenerator(xTest, yTest,
+                               length=xLen, stride=1,
+                               batch_size=20)
+                               
+# Функция рассчитываем результаты прогнозирования сети
+# В аргументы принимает сеть (currModel) и проверочную выборку
+# Выдаёт результаты предсказания predVal
+# И правильные ответы в исходной размерности yValUnscaled (какими они были до нормирования)
+def getPred(currModel, xVal, yVal, yScaler):
+  # Предсказываем ответ сети по проверочной выборке
+  # И возвращаем исходны масштаб данных, до нормализации
+  predVal = yScaler.inverse_transform(currModel.predict(xVal))
+  yValUnscaled = yScaler.inverse_transform(yVal)
+  
+  return (predVal, yValUnscaled)
+
+# Функция визуализирует графики, что предсказала сеть и какие были правильные ответы
+# start - точка с которой начинаем отрисовку графика
+# step - длина графика, которую отрисовываем
+# channel - какой канал отрисовываем
+def showPredict(start, step, channel, predVal, yValUnscaled):
+  plt.figure(figsize=(22,6))
+  plt.plot(predVal[start:start+step, 0],
+           label='Прогноз')
+  plt.plot(yValUnscaled[start:start+step, channel], 
+           label='Базовый ряд')
+  plt.xlabel('Время')
+  plt.ylabel('Значение Close')
+  plt.legend()
+  plt.show()
+  
+# Функция расёта корреляции дух одномерных векторов
+def correlate(a, b):
+  # Рассчитываем основные показатели
+  ma = a.mean() # Среднее значение первого вектора
+  mb = b.mean() # Среднее значение второго вектора
+  mab = (a*b).mean() # Среднее значение произведения векторов
+  sa = a.std() # Среднеквадратичное отклонение первого вектора
+  sb = b.std() # Среднеквадратичное отклонение второго вектора
+  
+  #Рассчитываем корреляцию
+  val = 1
+  if ((sa>0) & (sb>0)):
+    val = (mab-ma*mb)/(sa*sb)
+  return val
+
+# Функция рисуем корреляцию прогнозированного сигнала с правильным
+# Смещая на различное количество шагов назад
+# Для проверки появления эффекта автокорреляции
+# channels - по каким каналам отображать корреляцию
+# corrSteps - на какое количество шагов смещать сигнал назад для рассчёта корреляции
+def showCorr(channels, corrSteps, predVal, yValUnscaled):
+  # Проходим по всем каналам
+  for ch in channels:
+    corr = [] # Создаём пустой лист, в нём будут корреляции при смезении на i рагов обратно
+    yLen = yValUnscaled.shape[0] # Запоминаем размер проверочной выборки
+
+      # Постепенно увеличикаем шаг, насколько смещаем сигнал для проверки автокорреляции
+    for i in range(corrSteps):
+      # Получаем сигнал, смещённый на i шагов назад
+      # predVal[i:, ch]
+      # Сравниваем его с верными ответами, без смещения назад
+      # yValUnscaled[:yLen-i,ch]
+      # Рассчитываем их корреляцию и добавляем в лист
+      corr.append(correlate(yValUnscaled[:yLen-i,ch], predVal[i:, 0]))
+
+    own_corr = [] # Создаём пустой лист, в нём будут корреляции при смезении на i рагов обратно
+
+      # Постепенно увеличикаем шаг, насколько смещаем сигнал для проверки автокорреляции
+    for i in range(corrSteps):
+      # Получаем сигнал, смещённый на i шагов назад
+      # predVal[i:, ch]
+      # Сравниваем его с верными ответами, без смещения назад
+      # yValUnscaled[:yLen-i,ch]
+      # Рассчитываем их корреляцию и добавляем в лист
+      own_corr.append(correlate(yValUnscaled[:yLen-i,ch], yValUnscaled[i:, ch]))
+
+    # Отображаем график коррелций для данного шага
+    plt.figure(figsize=(14,7))
+    plt.plot(corr, label='Предсказание на ' + str(ch+1) + ' шаг')
+    plt.plot(own_corr, label='Эталон')
+
+  plt.xlabel('Время')
+  plt.ylabel('Значение')
+  plt.legend()
+  plt.show()
+  
+  #Создадим генератор проверочной выборки, из которой потом вытащим xVal, yVal для проверки
+DataGen = TimeseriesGenerator(xTest, yTest,
+                               length=300, sampling_rate=1,
+                               batch_size=len(xTest)) #размер batch будет равен длине нашей выборки
+xVal = []
+yVal = []
+for i in DataGen:
+  xVal.append(i[0])
+  yVal.append(i[1])
+
+xVal = np.array(xVal)
+yVal = np.array(yVal)
+
+#Одномерная свёртка
+modelC = Sequential()
+
+modelC.add(Conv1D(64, 5, input_shape = (xLen,5), activation="relu"))
+modelC.add(Conv1D(64, 5, activation="relu"))
+modelC.add(MaxPooling1D())
+modelC.add(Flatten())
+modelC.add(Dense(100, activation="relu"))
+modelC.add(Dense(1, activation="linear"))
+
+modelC.compile(loss="mse", optimizer=Adam(lr=1e-4))
+
+modelC.summary()
+history = modelC.fit(trainDataGen,
+                    epochs=50, 
+                    verbose=1,
+                    validation_data=testDataGen)
+plt.figure(figsize=(14,7))
+plt.plot(history.history['loss'], 
+         label='Средняя абсолютная ошибка на обучающем наборе')
+plt.plot(history.history['val_loss'], 
+         label='Средняя абсолютная ошибка на проверочном наборе')
+plt.ylabel('Средняя ошибка')
+plt.legend()
+plt.show()
+
+#Прогнозируем данные текущей сетью
+currModel = modelC
+(predVal, yValUnscaled) = getPred(currModel, xVal[0], yVal[0], yScaler)
+
+#Отображаем графики
+showPredict(100, 160, 0, predVal, yValUnscaled)
+#Отображаем корреляцию
+showCorr([0], 30, predVal, yValUnscaled)
+#Прогнозируем данные текущей сетью
+currModel = modelC #Выбираем текущую модель
+(predVal, yValUnscaled) = getPred(currModel, xVal[0], yVal[0], yScaler) #Прогнозируем данные
+
+#Отображаем графики
+showPredict(0, 160, 0, predVal[1:], yValUnscaled[:-1])
+modelC.compile(loss="mse", optimizer=Adam(lr=1e-5))
+history = modelC.fit(trainDataGen,
+                    epochs=20, 
+                    verbose=1,
+                    validation_data=testDataGen)
+plt.figure(figsize=(14,7))
+plt.plot(history.history['loss'], 
+         label='Средняя абсолютная ошибка на обучающем наборе')
+plt.plot(history.history['val_loss'], 
+         label='Средняя абсолютная ошибка на проверочном наборе')
+plt.ylabel('Средняя ошибка')
+plt.legend()
+plt.show()                    
+                   
